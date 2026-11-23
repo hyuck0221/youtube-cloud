@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ko" class="yc-popup">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YouTube Cloud</title>
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="popup.css">
+  <script defer src="settings.js"></script>
+  <script defer src="popup.js"></script>
+</head>
+<body>
+  <header class="header">
+    <img src="../icons/cloud-48.png" width="30" height="30" alt="">
+    <h1>YouTube Cloud</h1>
+    <label class="switch">
+      <input id="enabled" type="checkbox" role="switch" aria-label="영상에 댓글 표시">
+      <span aria-hidden="true"></span>
+    </label>
+  </header>
+
+  <main>
+    <fieldset class="modes">
+      <legend>표시 방식</legend>
+      <div class="mode-grid">
+        <label class="mode">
+          <input type="radio" name="mode" value="scatter">
+          <span class="mode-body">
+            <span class="mode-icon scatter-icon" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span>랜덤 위치</span>
+          </span>
+        </label>
+        <label class="mode">
+          <input type="radio" name="mode" value="chat">
+          <span class="mode-body">
+            <span class="mode-icon chat-icon" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span>고정 채팅창</span>
+          </span>
+        </label>
+      </div>
+    </fieldset>
+
+    <div class="row position-row" id="position-row" hidden>
+      <label for="position">채팅창 위치</label>
+      <select id="position">
+        <option value="top-left">왼쪽 위</option>
+        <option value="top-right">오른쪽 위</option>
+        <option value="bottom-left">왼쪽 아래</option>
+        <option value="bottom-right">오른쪽 아래</option>
+      </select>
+    </div>
+
+    <section class="preferences" aria-labelledby="preferences-title">
+      <h2 id="preferences-title">표시 설정</h2>
+      <div class="row range-row">
+        <label for="maxVisible">동시 표시 개수</label>
+        <input id="maxVisible" type="range">
+        <output id="maxVisible-value" for="maxVisible"></output>
+      </div>
+      <div class="row range-row">
+        <label for="duration">표시 시간</label>
+        <input id="duration" type="range">
+        <output id="duration-value" for="duration"></output>
+      </div>
+      <div class="row range-row">
+        <label for="delay">표시 딜레이</label>
+        <input id="delay" type="range">
+        <output id="delay-value" for="delay"></output>
+      </div>
+      <div class="row range-row">
+        <label for="fontSize">글자 크기</label>
+        <input id="fontSize" type="range">
+        <output id="fontSize-value" for="fontSize"></output>
+      </div>
+      <div class="row range-row">
+        <label for="opacity">불투명도</label>
+        <input id="opacity" type="range">
+        <output id="opacity-value" for="opacity"></output>
+      </div>
+      <div class="row author-row">
+        <label for="showAuthor">작성자 이름 표시</label>
+        <label class="switch">
+          <input id="showAuthor" type="checkbox" role="switch">
+          <span aria-hidden="true"></span>
+        </label>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p id="status" role="status">재생 중인 영상 확인 중…</p>
+    <button id="reload" type="button" disabled>다시 불러오기</button>
+  </footer>
+</body>
+</html>

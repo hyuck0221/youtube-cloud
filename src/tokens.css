@@ -1,0 +1,39 @@
+:root {
+  --yc-font: Roboto, "Noto Sans KR", "Apple SD Gothic Neo", Arial, sans-serif;
+  --yc-video-text: #fff;
+  --yc-video-backdrop: rgb(15 15 15 / 86%);
+  --yc-video-author: #ffd5d5;
+  --yc-video-shadow: rgb(0 0 0 / 96%);
+  --yc-density-fill: rgb(255 62 79 / 30%);
+  --yc-density-line: rgb(255 170 177 / 90%);
+  --yc-density-mask: #fff;
+}
+
+:root.yc-popup {
+  color-scheme: light dark;
+  --yc-paper: #fbfaf9;
+  --yc-ink: #161616;
+  --yc-muted: #5c5a59;
+  --yc-line: #dfdcda;
+  --yc-surface: #f1efed;
+  --yc-hover: #eae7e5;
+  --yc-accent: #bd1c2d;
+  --yc-selected: #fff0f0;
+  --yc-knob: #fff;
+  --yc-disabled: #aaa5a3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root.yc-popup {
+    --yc-paper: #171717;
+    --yc-ink: #f4f1f0;
+    --yc-muted: #b3adab;
+    --yc-line: #373333;
+    --yc-surface: #232121;
+    --yc-hover: #302b2b;
+    --yc-accent: #ff6772;
+    --yc-selected: #392529;
+    --yc-knob: #fff;
+    --yc-disabled: #535050;
+  }
+}
