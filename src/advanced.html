@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ko" class="yc-popup">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>고급설정 · YouTube Cloud</title>
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="popup.css">
+  <script defer src="advanced.js"></script>
+</head>
+<body>
+  <header class="header">
+    <a class="back-link" href="popup.html" aria-label="일반 설정으로 돌아가기">‹</a>
+    <h1>고급설정</h1>
+  </header>
+
+  <main class="advanced">
+    <section aria-labelledby="api-title">
+      <h2 id="api-title">YouTube Data API</h2>
+      <p class="api-copy">API 키를 등록하면 한 번에 최대 100개의 최상위 댓글을 받아 댓글이 많은 영상에서 수집 속도가 빨라질 수 있습니다.</p>
+      <form id="api-form">
+        <div class="row control-row">
+          <label for="api-enabled">YouTube Data API 사용</label>
+          <label class="switch">
+            <input id="api-enabled" type="checkbox" role="switch">
+            <span aria-hidden="true"></span>
+          </label>
+        </div>
+        <label class="api-field" for="api-key">API 키</label>
+        <input id="api-key" class="api-input" type="password" autocomplete="off" spellcheck="false" maxlength="128">
+        <div class="api-actions">
+          <button id="api-test" type="button">연결 테스트</button>
+          <button id="api-save" type="submit">키 저장</button>
+        </div>
+        <p id="api-status" class="api-status" role="status"></p>
+      </form>
+    </section>
+
+    <section class="preferences" aria-labelledby="quota-title">
+      <h2 id="quota-title">오늘 사용한 쿼터</h2>
+      <p id="api-usage" class="api-usage">—</p>
+      <p class="api-copy">이 브라우저에서 보낸 요청을 기본 한도와 비교하며 미국 태평양 시간 자정에 초기화됩니다. 프로젝트 전체 사용량은 <a href="https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas" target="_blank" rel="noopener">Google Cloud 콘솔</a>에서 확인할 수 있습니다.</p>
+      <p class="quota-estimate"><strong>최상위 댓글 1,000개당 최소 10유닛</strong></p>
+    </section>
+  </main>
+</body>
+</html>

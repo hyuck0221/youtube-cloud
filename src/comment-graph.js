@@ -5,25 +5,16 @@
   const baseline = 32;
   const kernel = [0.14, 0.52, 1, 0.52, 0.14];
 
-  function densityCurve(comments, duration) {
-    const density = new Float64Array(binCount);
-    for (const events of comments.values()) {
-      for (const { time } of events) {
-        if (time < 0 || time >= duration) continue;
-        const bin = Math.round(time / duration * (binCount - 1));
-        for (let i = 0; i < kernel.length; i++) {
-          const nearby = bin + i - 2;
-          if (nearby >= 0 && nearby < binCount) density[nearby] += kernel[i];
-        }
-      }
-    }
-
+  function densityPoints(density) {
     const peak = Math.max(...density);
-    if (!peak) return '';
-    const points = Array.from(density, (count, i) => [
+    if (!peak) return [];
+    return Array.from(density, (count, i) => [
       i * graphWidth / (binCount - 1),
       baseline - (baseline - 2) * count / peak,
     ]);
+  }
+
+  function densityCurve(points) {
     const [firstX, firstY] = points[0];
     const parts = [`M ${firstX} ${firstY.toFixed(2)}`];
     for (let i = 0; i < points.length - 1; i++) {
@@ -33,6 +24,17 @@
     }
     parts.push(`L ${graphWidth} ${points.at(-1)[1].toFixed(2)}`);
     return parts.join(' ');
+  }
+
+  function densityBars(points) {
+    const width = graphWidth / binCount * .32;
+    const bars = [];
+    for (const [center, top] of points) {
+      if (top >= baseline) continue;
+      const left = Math.max(0, Math.min(graphWidth - width, center - width / 2));
+      bars.push(`M ${left.toFixed(2)} ${baseline} V ${top.toFixed(2)} h ${width} V ${baseline} Z`);
+    }
+    return bars.join(' ');
   }
 
   function create() {
@@ -47,26 +49,41 @@
     const line = document.createElementNS(namespace, 'path');
     line.classList.add('yc-density-line');
     line.setAttribute('vector-effect', 'non-scaling-stroke');
-    chart.append(area, line);
+    const bars = document.createElementNS(namespace, 'path');
+    bars.classList.add('yc-density-bars');
+    chart.append(area, line, bars);
 
-    let previousDuration;
-    let previousCount;
-    let curve = '';
+    const density = new Float64Array(binCount);
+    let duration;
+    let dirty = false;
+    let previousMode;
+    let hasDensity = false;
 
     function setPath(element, path) {
       element.setAttribute('d', path);
       element.style.d = `path("${path}")`;
     }
 
+    function add(time, count = 1) {
+      if (!duration || time < 0 || time >= duration) return;
+      const bin = Math.round(time / duration * (binCount - 1));
+      for (let i = 0; i < kernel.length; i++) {
+        const nearby = bin + i - 2;
+        if (nearby >= 0 && nearby < binCount) density[nearby] += kernel[i] * count;
+      }
+      dirty = true;
+    }
+
     return {
+      add,
       reset() {
         chart.remove();
-        previousDuration = undefined;
-        previousCount = undefined;
-        curve = '';
+        duration = undefined;
+        previousMode = undefined;
+        hasDensity = false;
       },
-      update(player, duration, comments) {
-        if (!Number.isFinite(duration) || duration <= 0 || !comments.size) {
+      update(player, nextDuration, buckets, mode) {
+        if (!Number.isFinite(nextDuration) || nextDuration <= 0 || !buckets.size) {
           chart.remove();
           return;
         }
@@ -76,16 +93,27 @@
           return;
         }
 
-        if (duration !== previousDuration || comments.size !== previousCount) {
-          previousDuration = duration;
-          previousCount = comments.size;
-          curve = densityCurve(comments, duration);
-          if (curve) {
+        if (duration !== nextDuration) {
+          duration = nextDuration;
+          density.fill(0);
+          for (const { time, events } of buckets.values()) add(time, events.length);
+          dirty = true;
+        }
+        if (dirty || mode !== previousMode) {
+          dirty = false;
+          previousMode = mode;
+          chart.dataset.mode = mode;
+          const points = densityPoints(density);
+          hasDensity = points.length > 0;
+          if (hasDensity && mode === 'bars') {
+            setPath(bars, densityBars(points));
+          } else if (hasDensity) {
+            const curve = densityCurve(points);
             setPath(line, curve);
             setPath(area, `${curve} L ${graphWidth} ${baseline} L 0 ${baseline} Z`);
           }
         }
-        if (!curve) chart.remove();
+        if (!hasDensity) chart.remove();
         else if (chart.parentNode !== track) track.prepend(chart);
       },
     };

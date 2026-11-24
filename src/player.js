@@ -1,14 +1,23 @@
 (() => {
+  if (location.origin !== 'https://www.youtube.com' || globalThis.YoutubeCloudPlayerAttached) return;
+  globalThis.YoutubeCloudPlayerAttached = true;
+  // Chrome can leave the previous overlay in the page after disabling the extension.
+  document.querySelectorAll('#movie_player .yc-overlay, #movie_player .yc-density').forEach(node => node.remove());
   const { defaults, normalize } = YoutubeCloudSettings;
   const { timestampEvents, lowerBound } = YoutubeCloudTimeline;
   const graph = YoutubeCloudGraph.create();
   const freshness = 1.1;
-  const timedComments = new Map();
-  const emitted = new Set();
+  const timedComments = new Set();
+  const commentBuckets = new Map();
+  const playedCounts = new Map();
+  const timeline = [];
   const visible = [];
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const lifetime = new AbortController();
+  const lifetimeOptions = { signal: lifetime.signal };
 
   let settings = defaults;
+  let initialized = false;
   let readNodes = new WeakMap();
   let videoId;
   let player;
@@ -17,43 +26,60 @@
   let overlay;
   let stage;
   let requestId;
+  let apiSource;
+  let apiController;
   let loadState = 'idle';
+  let commentSource = 'web';
+  let progress = null;
+  let progressApproximate = false;
   let publishedStatus;
   let commentRoot;
   let needsScan = false;
   let needsSort = false;
-  let timeline = [];
+  let needsCursorReset = false;
   let cursor = 0;
   let lastTime = null;
   let wasAd = false;
   let playbackTimer;
   let fadeFrame;
+  let scanFrame;
+  let pageTimer;
 
-  const commentObserver = new MutationObserver(() => { needsScan = true; });
+  const commentObserver = new MutationObserver(() => {
+    needsScan = true;
+    if (scanFrame !== undefined) return;
+    scanFrame = requestAnimationFrame(() => {
+      scanFrame = undefined;
+      if (settings.enabled && videoId === watchId()) refreshPage();
+    });
+  });
 
   function watchId() {
     return location.pathname === '/watch' ? new URLSearchParams(location.search).get('v') : null;
   }
 
   function currentStatus() {
-    return { hasVideo: Boolean(videoId), videoId, count: timedComments.size, state: loadState };
+    return { hasVideo: Boolean(videoId), videoId, count: timedComments.size, state: loadState,
+      source: commentSource, progress, progressApproximate };
   }
 
   function publishStatus() {
-    const status = JSON.stringify(currentStatus());
-    if (status === publishedStatus) return;
-    publishedStatus = status;
-    if (chrome.runtime?.id) chrome.runtime.sendMessage({ type: 'youtube-cloud:status-changed' }).catch(() => {});
+    const status = currentStatus();
+    const serialized = JSON.stringify(status);
+    if (serialized === publishedStatus) return;
+    publishedStatus = serialized;
+    if (chrome.runtime?.id) chrome.runtime.sendMessage({ type: 'youtube-cloud:status-changed', status }).catch(() => {});
   }
 
   function refreshGraph() {
     const playerVideoId = player?.closest('ytd-watch-flexy')?.getAttribute('video-id');
-    if (!settings.enabled || !videoId || videoId !== watchId() || (playerVideoId && playerVideoId !== videoId)) {
+    if (!settings.enabled || !settings.graphEnabled || !videoId || videoId !== watchId() ||
+        (playerVideoId && playerVideoId !== videoId)) {
       graph.reset();
       return;
     }
     if (player?.classList.contains('ad-showing') || player?.classList.contains('ad-interrupting')) return;
-    graph.update(player, video?.duration, timedComments);
+    graph.update(player, video?.duration, commentBuckets, settings.graphMode);
   }
 
   function addComment({ id, text, author }) {
@@ -64,10 +90,19 @@
     if (timedComments.has(key)) return;
     const events = timestampEvents(body);
     if (!events.length) return;
-    timedComments.set(key, events.map(event => ({
-      ...event, author: name, key: JSON.stringify([key, event.time]),
-    })));
-    needsSort = true;
+    timedComments.add(key);
+    for (const event of events) {
+      let bucket = commentBuckets.get(event.time);
+      if (!bucket) {
+        bucket = { time: event.time, events: [] };
+        commentBuckets.set(event.time, bucket);
+        timeline.push(bucket);
+        needsSort = true;
+      }
+      bucket.events.push({ text: event.text, author: name });
+      graph.add(event.time);
+    }
+    needsCursorReset = true;
   }
 
   document.addEventListener('youtube-cloud:result', event => {
@@ -78,25 +113,61 @@
       return;
     }
     if (!requestId || result?.requestId !== requestId || result.videoId !== videoId || videoId !== watchId()) return;
+    applyResult(result);
+  }, lifetimeOptions);
+
+  function applyResult(result) {
+    const previousCount = timedComments.size;
     for (const comment of Array.isArray(result.comments) ? result.comments : []) {
       if (comment && typeof comment === 'object') addComment(comment);
     }
     loadState = result.state;
+    progress = Number.isFinite(result.progress) && result.progress >= 0 && result.progress <= 100 ? result.progress : null;
+    progressApproximate = result.progressApproximate === true;
     publishStatus();
-    refreshGraph();
-  });
+    if (timedComments.size !== previousCount) {
+      refreshGraph();
+      syncPlayback();
+    }
+  }
 
   function requestComments() {
     if (!videoId || !settings.enabled) return;
-    requestId = crypto.randomUUID();
+    cancelRequest();
+    const id = requestId = crypto.randomUUID();
+    const requestedVideo = videoId;
     loadState = 'loading';
+    commentSource = apiSource ? 'api' : 'web';
+    progress = null;
+    progressApproximate = false;
     publishStatus();
-    document.dispatchEvent(new CustomEvent('youtube-cloud:request', {
-      detail: JSON.stringify({ videoId, requestId }),
-    }));
+    function startWebCollection() {
+      if (requestId !== id || watchId() !== requestedVideo) return;
+      if (commentSource === 'api') {
+        commentSource = 'web-fallback';
+        progress = null;
+        progressApproximate = false;
+        publishStatus();
+      }
+      document.dispatchEvent(new CustomEvent('youtube-cloud:request', {
+        detail: JSON.stringify({ videoId: requestedVideo, requestId: id }),
+      }));
+    }
+    if (apiSource) {
+      apiController = new AbortController();
+      YoutubeCloudDataApi.collect(apiSource, requestedVideo, apiController.signal, result => {
+        if (requestId === id && watchId() === requestedVideo) applyResult(result);
+      }).then(handled => {
+        if (!handled) startWebCollection();
+      }, startWebCollection);
+    } else {
+      startWebCollection();
+    }
   }
 
   function cancelRequest() {
+    apiController?.abort();
+    apiController = undefined;
     if (!requestId) return;
     document.dispatchEvent(new CustomEvent('youtube-cloud:request', {
       detail: JSON.stringify({ videoId, requestId, cancel: true }),
@@ -234,7 +305,7 @@
 
   function resetPlayback() {
     lastTime = null;
-    emitted.clear();
+    playedCounts.clear();
     clearVisible();
   }
 
@@ -283,25 +354,30 @@
     }
 
     const minimumTime = Math.min(lastTime ?? time, time - freshness);
-    const resetCursor = needsSort || lastTime === null;
+    const resetCursor = needsCursorReset || lastTime === null;
     if (needsSort) {
-      timeline = [...timedComments.values()].flat().sort((a, b) => a.time - b.time);
+      timeline.sort((a, b) => a.time - b.time);
       needsSort = false;
     }
+    needsCursorReset = false;
     const delay = settings.delay;
     if (resetCursor) cursor = lowerBound(timeline, minimumTime - delay);
     lastTime = time;
 
     while (visible.length && visible[0].shownAt + settings.duration <= time) visible.shift().node.remove();
     while (cursor < timeline.length) {
-      const event = timeline[cursor];
-      const displayAt = event.time + delay;
+      const { time: timestamp, events } = timeline[cursor];
+      const displayAt = timestamp + delay;
       if (displayAt > time) break;
       cursor++;
-      if (displayAt < minimumTime || emitted.has(event.key)) continue;
+      if (displayAt < minimumTime) continue;
       if (Number.isFinite(video.duration) && displayAt >= video.duration) continue;
-      emitted.add(event.key);
-      showComment(event, time);
+      const first = playedCounts.get(timestamp) || 0;
+      playedCounts.set(timestamp, events.length);
+      for (let index = first; index < events.length; index++) {
+        if (settings.mode === 'scatter' && visible.length >= settings.maxVisible) break;
+        showComment(events[index], time);
+      }
     }
 
     const advancing = video.readyState >= 3 && video.playbackRate > 0;
@@ -336,6 +412,18 @@
   }
 
   function refreshPage() {
+    if (!chrome.runtime?.id) {
+      clearInterval(pageTimer);
+      lifetime.abort();
+      cancelRequest();
+      listeners?.abort();
+      commentObserver.disconnect();
+      cancelAnimationFrame(scanFrame);
+      clearVisible();
+      attachOverlay(undefined);
+      graph.reset();
+      return;
+    }
     const nextId = watchId();
     if (nextId !== videoId) {
       cancelRequest();
@@ -344,11 +432,16 @@
       commentRoot = undefined;
       readNodes = new WeakMap();
       timedComments.clear();
+      commentBuckets.clear();
       graph.reset();
-      timeline = [];
+      timeline.length = 0;
       needsSort = false;
+      needsCursorReset = false;
       resetPlayback();
       loadState = 'idle';
+      commentSource = 'web';
+      progress = null;
+      progressApproximate = false;
       wasAd = false;
       requestComments();
     }
@@ -384,6 +477,11 @@
 
   chrome.runtime.onMessage.addListener((message, _sender, reply) => {
     if (message?.type !== 'youtube-cloud:reload' && message?.type !== 'youtube-cloud:status') return;
+    if (!initialized) {
+      const pendingVideo = watchId();
+      reply({ hasVideo: Boolean(pendingVideo), videoId: pendingVideo, state: 'idle', count: 0 });
+      return;
+    }
     if (watchId() !== videoId) refreshPage();
     if (message?.type === 'youtube-cloud:reload') {
       requestComments();
@@ -392,16 +490,23 @@
     reply(currentStatus());
   });
 
-  document.addEventListener('yt-navigate-finish', refreshPage);
-  window.navigation?.addEventListener('currententrychange', refreshPage);
-  window.addEventListener('popstate', refreshPage);
-  reducedMotion.addEventListener('change', syncPlayback);
-  chrome.storage.local.get(defaults).then(values => {
+  chrome.storage.local.get({ ...defaults, ycApiSource: null }).then(values => {
     settings = normalize(values);
+    apiSource = values.ycApiSource;
+    initialized = true;
+    document.addEventListener('yt-navigate-finish', refreshPage, lifetimeOptions);
+    window.navigation?.addEventListener('currententrychange', refreshPage, lifetimeOptions);
+    window.addEventListener('popstate', refreshPage, lifetimeOptions);
+    reducedMotion.addEventListener('change', syncPlayback, lifetimeOptions);
+    pageTimer = setInterval(refreshPage, 650);
     refreshPage();
-    setInterval(refreshPage, 650);
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'local') return;
+      if ('ycApiSource' in changes) {
+        apiSource = changes.ycApiSource.newValue;
+        requestComments();
+      }
+      if (!Object.keys(defaults).some(key => key in changes)) return;
       const values = { ...settings };
       for (const key of Object.keys(defaults)) {
         if (key in changes) values[key] = changes[key].newValue;

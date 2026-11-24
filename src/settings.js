@@ -9,6 +9,8 @@
     fontSize: 18,
     opacity: 100,
     showAuthor: false,
+    graphEnabled: true,
+    graphMode: 'line',
   });
 
   const ranges = Object.freeze({
@@ -22,6 +24,7 @@
   const choices = {
     mode: ['scatter', 'chat'],
     position: ['top-left', 'top-right', 'bottom-left', 'bottom-right'],
+    graphMode: ['line', 'bars'],
   };
 
   globalThis.YoutubeCloudSettings = {

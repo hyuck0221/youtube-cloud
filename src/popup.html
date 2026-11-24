@@ -77,7 +77,7 @@
         <input id="opacity" type="range">
         <output id="opacity-value" for="opacity"></output>
       </div>
-      <div class="row author-row">
+      <div class="row control-row">
         <label for="showAuthor">작성자 이름 표시</label>
         <label class="switch">
           <input id="showAuthor" type="checkbox" role="switch">
@@ -85,10 +85,32 @@
         </label>
       </div>
     </section>
+
+    <section class="preferences" aria-labelledby="graph-title">
+      <h2 id="graph-title">댓글 분포 그래프</h2>
+      <div class="row control-row">
+        <label for="graphEnabled">그래프 표시</label>
+        <label class="switch">
+          <input id="graphEnabled" type="checkbox" role="switch">
+          <span aria-hidden="true"></span>
+        </label>
+      </div>
+      <div class="row control-row">
+        <label for="graphMode">그래프 유형</label>
+        <select id="graphMode">
+          <option value="line">선 그래프</option>
+          <option value="bars">얇은 막대 그래프</option>
+        </select>
+      </div>
+    </section>
+    <a class="settings-link" href="advanced.html">고급설정</a>
   </main>
 
   <footer class="footer">
-    <p id="status" role="status">재생 중인 영상 확인 중…</p>
+    <div>
+      <p id="status" role="status">재생 중인 영상 확인 중…</p>
+      <p id="comment-source" hidden></p>
+    </div>
     <button id="reload" type="button" disabled>다시 불러오기</button>
   </footer>
 </body>

@@ -113,6 +113,9 @@
 }
 
 .yc-density-area { fill: var(--yc-density-fill); }
+.yc-density-bars { display: none; fill: var(--yc-density-line); }
+.yc-density[data-mode="bars"] .yc-density-bars { display: block; }
+.yc-density[data-mode="bars"] :is(.yc-density-area, .yc-density-line) { display: none; }
 
 .yc-density-line {
   fill: none;
